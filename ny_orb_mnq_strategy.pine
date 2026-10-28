@@ -3,7 +3,7 @@ strategy("NY Open ORB · MNQ (Strategy)", shorttitle = "NY ORB MNQ S", overlay =
      initial_capital = 50000, currency = currency.USD, pyramiding = 0,
      commission_type = strategy.commission.cash_per_contract, commission_value = 0.62,
      slippage = 1, process_orders_on_close = true, margin_long = 0, margin_short = 0,
-     max_boxes_count = 500)
+     max_boxes_count = 500, max_lines_count = 500)
 
 // US cash-open version of london_orb_mnq_strategy.pine: same rules, only the session moves.
 // Defaults = the config validated in backtest/grids/ny_open.toml:
@@ -38,6 +38,8 @@ maxRange  = input.float(1000, "Max range (pts)", minval = 0, group = G_TRD)
 colRange = input.color(color.new(color.gray, 85), "Range fill", group = G_VIS)
 colLong  = input.color(color.teal, "Target", group = G_VIS)
 colShort = input.color(color.red, "Stop", group = G_VIS)
+showMid  = input.bool(true, "Range midline", inline = "mid", group = G_VIS)
+colMid   = input.color(color.new(color.gray, 30), "", inline = "mid", group = G_VIS)
 
 // ───────────────────────────── Guards ─────────────────────────────
 bool  isMNQ   = syminfo.root == "MNQ"
@@ -75,6 +77,7 @@ var int   closedAtStart = 0
 var float slLong        = na
 var float slShort       = na
 var box   orBox         = na
+var line  orMid         = na
 
 // ───────────────────────────── Opening range ─────────────────────────────
 if orStart
@@ -86,6 +89,7 @@ if orStart
     closedAtStart := strategy.closedtrades
     if isMNQ
         orBox := box.new(bar_index, high, bar_index, low, border_color = color.new(color.gray, 50), bgcolor = colRange)
+        orMid := showMid ? line.new(bar_index, hl2, bar_index, hl2, color = colMid, style = line.style_dashed) : na
 else if inOR and not orReady
     orHigh := math.max(orHigh, high)
     orLow  := math.min(orLow, low)
@@ -93,9 +97,14 @@ else if inOR and not orReady
 if inOR and not na(orBox)
     box.set_top(orBox, orHigh)
     box.set_bottom(orBox, orLow)
+    if not na(orMid)
+        line.set_y1(orMid, (orHigh + orLow) / 2)
+        line.set_y2(orMid, (orHigh + orLow) / 2)
 
 if (inOR or (orReady and inEntry)) and not na(orBox)
     box.set_right(orBox, bar_index)
+    if not na(orMid)
+        line.set_x2(orMid, bar_index)
 
 if orLast and not na(orHigh)
     orReady := true

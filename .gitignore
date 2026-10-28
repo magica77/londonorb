@@ -44,3 +44,4 @@ backtest/web/data.js
 backtest/web/*/data.js
 
 .python-version
+RESUME_HERE.md
