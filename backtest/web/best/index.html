@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORB Strategy Ranking</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --soft: #f0efec;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --pos: #2a78d6; --neg: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --soft: #262624;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --pos: #3987e5; --neg: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --soft: #262624;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --pos: #3987e5; --neg: #e66767;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 18px; margin: 0 0 4px; }
+nav a { color: var(--ink2); margin-right: 14px; text-decoration: none; white-space: nowrap; }
+nav a:hover { color: var(--ink); text-decoration: underline; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+h2 { font-size: 17px; margin: 0 0 6px; }
+h3 { font-size: 14px; margin: 18px 0 6px; }
+.note { color: var(--ink2); margin: 4px 0 12px; max-width: 920px; }
+.meta { color: var(--muted); font-size: 12px; }
+.answer { font-size: 15px; max-width: 920px; }
+.answer li { margin-bottom: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.tile .name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.tile .desc { color: var(--ink2); font-size: 12.5px; margin: 2px 0 6px; }
+.tile .big { font-size: 24px; margin: 2px 0; font-variant-numeric: tabular-nums; }
+.tile .row { color: var(--ink2); font-variant-numeric: tabular-nums; font-size: 13px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+.chart { position: relative; height: 340px; }
+.chart.sm { height: 230px; }
+.chart.ex { height: 380px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+.table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { padding: 5px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink2); font-weight: 600; }
+th:first-child, td:first-child { text-align: left; }
+td.txt, th.txt { text-align: left; }
+td.wrap { white-space: normal; min-width: 260px; text-align: left; }
+#top20 th { cursor: pointer; user-select: none; }
+#top20 tbody tr { cursor: pointer; }
+#top20 tr.sel td { background: color-mix(in srgb, var(--s1) 14%, transparent); }
+tbody tr:hover td { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.neg { color: var(--neg); }
+.tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--axis); color: var(--ink2); }
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; counter-reset: step; }
+.flow div { border: 1px solid var(--border); border-radius: 6px; padding: 10px; background: var(--soft); position: relative; }
+.flow div b { display: block; margin-bottom: 4px; }
+.flow div b::before { counter-increment: step; content: counter(step) ". "; color: var(--muted); }
+.flow div span { color: var(--ink2); font-size: 13px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.tabs button { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink2); border: 1px solid var(--axis); border-radius: 14px; padding: 3px 12px; cursor: pointer; }
+.tabs button.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.calc { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.calc .k { color: var(--ink2); }
+.calc code, code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--soft); padding: 0 4px; border-radius: 3px; }
+.timeline { position: relative; font-size: 12px; }
+.tl-row { display: grid; grid-template-columns: 150px 1fr 70px; align-items: center; gap: 8px; margin: 4px 0; }
+.tl-row .lbl { color: var(--ink2); }
+.tl-row .val { text-align: right; font-variant-numeric: tabular-nums; }
+.tl-track { position: relative; height: 18px; background: var(--soft); border-radius: 3px; }
+.tl-seg { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.tl-axis { display: grid; grid-template-columns: 150px 1fr 70px; gap: 8px; color: var(--muted); }
+.tl-axis .ticks { position: relative; height: 16px; }
+.tl-axis .ticks span { position: absolute; transform: translateX(-50%); }
+.legend-inline { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink2); font-size: 12.5px; margin: 6px 0; }
+.legend-inline span { display: inline-flex; align-items: center; gap: 6px; }
+dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+dl.gloss dt { font-weight: 600; }
+dl.gloss dd { margin: 0; color: var(--ink2); }
+@media (max-width: 640px) {
+  .two { grid-template-columns: 1fr; }
+  .chart { height: 280px; } .chart.ex { height: 300px; }
+  .tl-row, .tl-axis { grid-template-columns: 90px 1fr 54px; }
+  header { position: static; }
+  dl.gloss { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>ORB strategy ranking · MNQ &amp; MES, London &amp; NY open</h1>
+  <nav>
+    <a href="#answer">Answer</a><a href="#top3">Top 3</a><a href="#top20">Top 20</a>
+    <a href="#how">How it's computed</a><a href="#example">Example trades</a><a href="#validation">Validation</a>
+    <a href="#glossary">Glossary</a><a href="../index.html">MNQ page</a><a href="../es/index.html">ES page</a>
+  </nav>
+</header>
+<main>
+
+<section id="answer">
+  <h2>The short answer</h2>
+  <p class="meta" id="meta"></p>
+  <ul class="answer" id="answer-list"></ul>
+  <div class="table-wrap" style="margin-top:10px"><table id="grid-summary"></table></div>
+</section>
+
+<section id="top3">
+  <h2>Top 3 strategies compared</h2>
+  <p class="note">Ranked by <b>robust score</b>: the lower of a strategy's in-sample and out-of-sample Sharpe. A strategy is only as good as its worse half. All numbers are 1% risk ($500 = 1R) on a fixed $50k account, after $1.24 commission and 1 tick of slippage per side.</p>
+  <div class="tiles" id="tiles"></div>
+  <h3>Side by side</h3>
+  <div class="table-wrap"><table id="cmp"></table></div>
+  <h3>Equity curve (cumulative R, month end)</h3>
+  <p class="note">The dashed vertical line is the in-sample / out-of-sample split. The gray dashed curve is the <b>MNQ NY walk-forward</b>: what you'd have earned by re-picking the best setting every 6 months using only the past 24 months. It's the honest benchmark, because nothing in it was chosen with hindsight.</p>
+  <div class="chart"><canvas id="eq"></canvas></div>
+  <div class="two" style="margin-top:12px">
+    <div><h3>R by calendar year</h3><p class="meta">2021 is a partial year (late Oct–Dec).</p><div class="chart sm"><canvas id="yr"></canvas></div></div>
+    <div><h3>Drawdown (R below the previous peak)</h3><p class="meta">Deepest point each month, measured trade by trade.</p><div class="chart sm"><canvas id="dd"></canvas></div></div>
+  </div>
+</section>
+
+<section id="top20">
+  <h2>Top 20 strategies (all four grids)</h2>
+  <p class="note" id="top20-note"></p>
+  <div class="table-wrap" style="max-height:560px"><table id="t20"></table></div>
+  <h3 id="sel-title">Selected strategy vs #1</h3>
+  <p class="meta">Click a row above to plot it.</p>
+  <div class="chart sm"><canvas id="sel"></canvas></div>
+</section>
+
+<section id="how">
+  <h2>How a backtest result is computed</h2>
+  <p class="note">Every number on this page comes from the same five steps. The engine is <code>backtest/orb/engine.py</code>; it doesn't read the Pine scripts, it re-implements their rules.</p>
+  <div class="flow">
+    <div><b>Price data</b><span>Databento CME 1-minute bars, Oct 2021 → Oct 2026. MNQ.v.0 for MNQ; ES.v.0 prices for MES (same price, $5/pt).</span></div>
+    <div><b>Simulate each day</b><span>Build the opening range, wait for a breakout, set stop and target, size the position, then walk the 1-minute bars to the exit (target, stop, or end of day).</span></div>
+    <div><b>Trade list</b><span>One row per trade: entry, stop, exit, contracts, $ P&amp;L, and <i>R</i> = P&amp;L ÷ the $ that was at risk.</span></div>
+    <div><b>Daily P&amp;L</b><span>Every weekday counts, including days with no trade (P&amp;L = 0). That's what Sharpe and drawdown are computed from.</span></div>
+    <div><b>Metrics</b><span>Total R, win %, profit factor, Sharpe, max drawdown. Then the same for the in-sample and out-of-sample halves separately.</span></div>
+  </div>
+  <h3>The rules the simulator applies each day</h3>
+  <ol class="note" style="max-width:none">
+    <li><b>Opening range:</b> the highest high and lowest low of the 1m bars from the range start for N minutes (e.g. 09:30–10:00 New York).</li>
+    <li><b>Breakout:</b> <i>close</i> = the first signal bar (1m or 5m) that closes beyond the range, filled at that close; <i>touch</i> = a stop order one tick beyond the range, filled when price trades there. One trade a day at most.</li>
+    <li><b>Stop:</b> the opposite side of the range (or its midpoint). <b>Target:</b> entry ± RR × (entry − stop).</li>
+    <li><b>Size:</b> contracts = floor($500 ÷ (stop distance × $/pt + $1.24)), capped at 10. If that's 0, the day is skipped.</li>
+    <li><b>Exit:</b> check every 1m bar after entry. If a bar touches both stop and target, the stop wins (conservative). Still open at the flat time → exit at that bar's open ("EOD").</li>
+    <li><b>Costs:</b> $1.24 per contract round trip, plus 1 tick of slippage on the entry, the stop and the EOD exit (none on the target, a limit order).</li>
+  </ol>
+</section>
+
+<section id="example">
+  <h2>Example trades, worked by hand</h2>
+  <p class="note" id="ex-note"></p>
+  <div class="tabs" id="ex-tabs"></div>
+  <div class="legend-inline" id="ex-legend"></div>
+  <div class="chart ex"><canvas id="exc"></canvas></div>
+  <h3>The arithmetic</h3>
+  <div class="calc" id="ex-calc"></div>
+</section>
+
+<section id="validation">
+  <h2>How we know whether a result is real</h2>
+  <p class="note">Testing many settings and keeping the best one finds luck as well as edge. Three checks separate the two.</p>
+  <h3>1. In-sample vs out-of-sample</h3>
+  <p class="note" id="split-note"></p>
+  <div class="timeline" id="tl-split"></div>
+  <h3>2. Walk-forward (picked blind)</h3>
+  <p class="note">Every 6 months, pick the best setting using only the previous 24 months, then trade it for the next 6 months. Only the colored test windows count. This is the closest thing to "what would have happened if I'd used this method live".</p>
+  <div class="timeline" id="tl-wf"></div>
+  <div class="table-wrap" style="margin-top:12px"><table id="wf-table"></table></div>
+  <h3>3. Does in-sample performance predict out-of-sample?</h3>
+  <p class="note">Each dot is one setting. Right = good in-sample (before the split), up = good out-of-sample (after it). The top 3 are ringed. Settings in the upper-right worked in both halves; a cloud with no upward slope means picking on past results doesn't help.</p>
+  <div class="legend-inline"><span><span class="swatch" style="background:var(--s1)"></span>MNQ</span><span><span class="swatch" style="background:var(--s2)"></span>MES</span><span>● London &nbsp;▲ NY</span></div>
+  <div class="chart"><canvas id="sc"></canvas></div>
+</section>
+
+<section id="glossary">
+  <h2>Glossary</h2>
+  <dl class="gloss">
+    <dt>R</dt><dd>The money a trade planned to risk: (entry − stop) × $/pt × contracts + commission. A trade that hits a 1R target makes about +1R; a full stop-out is about −1R. Total R lets you compare strategies regardless of position size. Here 1R ≈ $500 (1% of $50k), less when the contract cap or rounding binds.</dd>
+    <dt>Win %</dt><dd>Share of trades with positive P&amp;L.</dd>
+    <dt>Profit factor (PF)</dt><dd>Gross wins ÷ gross losses. 1.0 = break even; 1.2 = $1.20 won per $1 lost.</dd>
+    <dt>Sharpe</dt><dd>Average daily return ÷ its standard deviation, × √252 (annualised). Uses every weekday. Above 1 is good for a single strategy; below 0.5 is weak.</dd>
+    <dt>Max drawdown</dt><dd>The largest fall from a running peak of the equity curve, in R or $.</dd>
+    <dt>In-sample (IS)</dt><dd>The first 70% of days (to about Apr 2025). Results here helped choose the setting, so they flatter it.</dd>
+    <dt>Out-of-sample (OOS)</dt><dd>The last 30% of days. Still part of the five years I looked at when ranking, but a setting that only worked in-sample shows up here.</dd>
+    <dt>Robust score</dt><dd>min(IS Sharpe, OOS Sharpe). The ranking rule on this page.</dd>
+    <dt>Walk-forward</dt><dd>Repeatedly choose on a past window and trade the next window blind. The most honest estimate of live performance.</dd>
+    <dt>Touch vs close entry</dt><dd>Touch: a resting stop order one tick past the range; fills as soon as price gets there. Close: wait for a 1m or 5m bar to close past the range, then enter at market.</dd>
+    <dt>EOD</dt><dd>End of day: still open at the flat time, closed at market.</dd>
+  </dl>
+  <h3>Caveats</h3>
+  <ul class="note" style="max-width:none">
+    <li>About 2,400 settings were tested on one five-year sample. Even the robust score uses data I looked at, so expect live results below these numbers; the walk-forward totals are the realistic guide.</li>
+    <li>The engine checks exits on 1m bars and fills EOD at the open, so results won't exactly match the TradingView strategy tester.</li>
+    <li>MES results use ES prices with MES contract terms ($5/pt).</li>
+  </ul>
+</section>
+</main>
+
+<script>
+"use strict";
+const D = window.DATA;
+if (!D) document.querySelector("main").innerHTML = "<section><h2>No data</h2><p>Run <code>uv run python web/build_best.py</code> in <code>backtest/</code> first.</p></section>";
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = { ink: css("--ink"), ink2: css("--ink2"), muted: css("--muted"), grid: css("--grid"), axis: css("--axis"), soft: css("--soft"),
+            s: [css("--s1"), css("--s2"), css("--s3"), css("--s4")], pos: css("--pos"), neg: css("--neg"), surface: css("--surface") };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => location.reload());
+Chart.defaults.color = C.muted;
+Chart.defaults.borderColor = C.grid;
+Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+Chart.defaults.plugins.legend.labels.color = C.ink2;
+Chart.defaults.plugins.legend.labels.boxWidth = 10;
+Chart.defaults.plugins.legend.labels.boxHeight = 10;
+Chart.defaults.plugins.tooltip.backgroundColor = C.surface;
+Chart.defaults.plugins.tooltip.titleColor = C.ink;
+Chart.defaults.plugins.tooltip.bodyColor = C.ink2;
+Chart.defaults.plugins.tooltip.borderColor = C.axis;
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.maintainAspectRatio = false;
+Chart.defaults.animation = false;
+
+const fmt = (v, d = 2) => v == null ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const money = v => v == null ? "—" : (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+const cls = v => v != null && v < 0 ? ' class="neg"' : "";
+const $ = id => document.getElementById(id);
+const hm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const T = D.top, T3 = T.slice(0, 3), WF = D.walkforward;
+const short = s => `#${s.rank} ${s.grid}`;
+const zeroLine = { grid: { color: c => c.tick && c.tick.value === 0 ? C.axis : C.grid } };
+const splitMonth = D.splits["MNQ.v.0"].slice(0, 7);
+const vline = { id: "vline", afterDatasetsDraw(ch, _a, o) {
+  if (!o || o.label == null) return;
+  const x = ch.scales.x.getPixelForValue(o.label); if (x == null || isNaN(x)) return;
+  const { top, bottom } = ch.chartArea, g = ch.ctx;
+  g.save(); g.strokeStyle = C.muted; g.setLineDash([4, 4]); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(x, top); g.lineTo(x, bottom); g.stroke();
+  g.fillStyle = C.ink2; g.font = "12px system-ui"; g.fillText(o.text || "", x + 4, top + 12); g.restore();
+} };
+Chart.register(vline);
+
+// ---------- answer ----------
+const wfNY = WF["MNQ NY"];
+$("meta").textContent = `Generated ${D.generated} · ${D.n_configs.toLocaleString()} settings tested (${D.n_unique.toLocaleString()} distinct after merging ATR-cap variants) · in-sample before ${D.splits["MNQ.v.0"]}, out-of-sample after`;
+const [a, b, c] = T3;
+$("answer-list").innerHTML = [
+  `<b>All three best strategies are the MNQ NY open</b> (09:30 New York), with a 30-minute opening range and the stop at the other side of the range. No London or MES setting makes the top 3.`,
+  `<b>#1 and #2 are a tie</b> (robust score ${fmt(a.robust)} vs ${fmt(b.robust)}). They differ only in entry: #1 waits for a 5-minute close beyond the range (smaller drawdown, ${fmt(a.stats.max_dd_r, 1)}R); #2 uses a stop order one tick beyond it (more total R, ${fmt(b.stats.total_r, 1)} vs ${fmt(a.stats.total_r, 1)}, and the highest full-period Sharpe of all, ${fmt(b.stats.sharpe)}).`,
+  `<b>#3 is the touch entry with a 3R target, flat at 12:00</b>: ${fmt(c.stats.total_r, 1)}R, max drawdown ${fmt(c.stats.max_dd_r, 1)}R. The 3R target is almost never reached (${c.stats.exits.TP || 0} of ${c.stats.trades} trades), so in practice it's "enter on the breakout, exit at the stop or at noon".`,
+  `<b>Reality check:</b> picking settings blind every 6 months (walk-forward) earned <b>${fmt(wfNY.total_r, 1)}R</b> on MNQ NY over the last three years, against ${fmt(a.stats.total_r, 1)}–${fmt(b.stats.total_r, 1)}R for the top two over five years. Expect live results nearer the walk-forward than the top of the table.`,
+].map(s => `<li>${s}</li>`).join("");
+const gs = D.grids.slice().sort((x, y) => y.best_robust - x.best_robust);
+$("grid-summary").innerHTML = `<thead><tr><th>Market / session</th><th>Settings tested</th><th>Profitable over 5 years</th><th>Positive in both halves</th><th>Best robust score</th><th>Walk-forward (blind) R</th></tr></thead><tbody>` +
+  gs.map(g => `<tr><td>${g.grid}</td><td>${g.configs}</td><td>${g.positive}</td><td>${g.both}</td><td${cls(g.best_robust)}>${fmt(g.best_robust)}</td><td${cls(WF[g.grid].total_r)}>${fmt(WF[g.grid].total_r, 1)}</td></tr>`).join("") + "</tbody>";
+
+// ---------- top 3 ----------
+$("tiles").innerHTML = T3.map((s, i) => `
+  <div class="tile"><div class="name"><span class="swatch" style="background:${C.s[i]}"></span>#${s.rank} · ${s.grid}</div>
+  <div class="desc">${s.desc}</div>
+  <div class="big">${fmt(s.stats.total_r, 1)} R <span class="meta">${money(s.stats.net)}</span></div>
+  <div class="row">robust ${fmt(s.robust)} · Sharpe ${fmt(s.stats.sharpe)} · PF ${fmt(s.stats.pf)}</div>
+  <div class="row">${s.stats.trades} trades · win ${fmt(s.stats.win_pct, 0)}% · max DD ${fmt(s.stats.max_dd_r, 1)}R</div></div>`).join("");
+const rows = [
+  ["Robust score (min of IS/OOS Sharpe)", s => fmt(s.robust)],
+  ["Sharpe: in-sample / out-of-sample", s => `${fmt(s.is_sharpe)} / ${fmt(s.oos_sharpe)}`],
+  ["Sharpe: full 5 years", s => fmt(s.stats.sharpe)],
+  ["Total R (in-sample + out-of-sample)", s => `${fmt(s.stats.total_r, 1)} (${fmt(s.is_total_r, 1)} + ${fmt(s.oos_total_r, 1)})`],
+  ["Net $ at 1% risk on $50k", s => money(s.stats.net)],
+  ["Trades (per year)", s => `${s.stats.trades} (${fmt(s.stats.trades_yr, 0)})`],
+  ["Win %", s => fmt(s.stats.win_pct, 1)],
+  ["Average R per trade", s => fmt(s.stats.avg_r, 3)],
+  ["Profit factor", s => fmt(s.stats.pf)],
+  ["Max drawdown", s => `${fmt(s.stats.max_dd_r, 1)}R (${money(s.stats.max_dd)})`],
+  ["Worst / best month", s => `${fmt(s.worst_month_r, 1)}R / +${fmt(s.best_month_r, 1)}R`],
+  ["Years positive", s => `${s.years_pos} of ${s.years}`],
+  ["Exits: target / stop / EOD", s => ["TP", "SL", "EOD"].map(k => s.stats.exits[k] || 0).join(" / ")],
+  ["$ risk on 1 contract (median / 90th pct)", s => `${money(s.median_contract_risk)} / ${money(s.p90_contract_risk)}`],
+  ["Average contracts at $500 risk", s => fmt(s.stats.avg_qty, 1)],
+];
+$("cmp").innerHTML = `<thead><tr><th>Metric</th>${T3.map((s, i) => `<th><span class="swatch" style="background:${C.s[i]}"></span> #${s.rank}</th>`).join("")}</tr></thead><tbody>` +
+  rows.map(([k, f]) => `<tr><td>${k}</td>${T3.map(s => `<td>${f(s)}</td>`).join("")}</tr>`).join("") + "</tbody>";
+
+const M = D.months;
+const lineDS = (s, i) => ({ label: `#${s.rank} ${s.desc.split(" · ").slice(1, 5).join(" · ")}`, data: s.eq, borderColor: C.s[i], backgroundColor: C.s[i], borderWidth: 2, pointRadius: 0, tension: 0 });
+new Chart($("eq"), { type: "line",
+  data: { labels: M, datasets: [...T3.map(lineDS), { label: "MNQ NY walk-forward (blind)", data: wfNY.eq, borderColor: C.muted, backgroundColor: C.muted, borderDash: [6, 4], borderWidth: 2, pointRadius: 0, spanGaps: false }] },
+  options: { interaction: { mode: "index", intersect: false },
+    plugins: { vline: { label: splitMonth, text: "out-of-sample →" }, tooltip: { callbacks: { label: c => `${c.dataset.label.split(" ")[0]}: ${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { ticks: { maxTicksLimit: 11, maxRotation: 0 }, grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "cumulative R" } } } } });
+
+const years = [...new Set(T3.flatMap(s => Object.keys(s.by_year)))].sort();
+new Chart($("yr"), { type: "bar",
+  data: { labels: years, datasets: T3.map((s, i) => ({ label: `#${s.rank}`, data: years.map(y => s.by_year[y] ?? 0), backgroundColor: C.s[i], borderRadius: 4, borderSkipped: false, borderColor: C.surface, borderWidth: 1 })) },
+  options: { plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "R" } } } } });
+new Chart($("dd"), { type: "line",
+  data: { labels: M, datasets: T3.map((s, i) => ({ label: `#${s.rank}`, data: s.uw, borderColor: C.s[i], backgroundColor: C.s[i], borderWidth: 2, pointRadius: 0, stepped: true })) },
+  options: { interaction: { mode: "index", intersect: false },
+    plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { ticks: { maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false } }, y: { ...zeroLine, max: 0, title: { display: true, text: "R below peak" } } } } });
+
+// ---------- top 20 ----------
+$("top20-note").innerHTML = `Ranked by robust score across MNQ London, MNQ NY, MES London and MES NY. Settings that differ only by the daily-ATR cap are merged (the cap rarely changes which days trade). "Years +" counts calendar years with positive R; 2021 is a partial year. "1-contract risk" is the median $ at risk on one contract, the minimum R you can trade this with.`;
+const COLS = [
+  ["rank", "#", s => s.rank], ["grid", "Market", s => s.grid, true], ["desc", "Settings", s => s.desc, true],
+  ["robust", "Robust", s => s.robust], ["is", "IS Sharpe", s => s.is_sharpe], ["oos", "OOS Sharpe", s => s.oos_sharpe],
+  ["sh", "5y Sharpe", s => s.stats.sharpe], ["tr", "Total R", s => s.stats.total_r], ["net", "Net $", s => s.stats.net],
+  ["pf", "PF", s => s.stats.pf], ["dd", "Max DD R", s => s.stats.max_dd_r], ["n", "Trades/yr", s => s.stats.trades_yr],
+  ["w", "Win %", s => s.stats.win_pct], ["y", "Years +", s => s.years_pos], ["risk", "1-contract risk", s => s.median_contract_risk],
+];
+let sortKey = "rank", sortDir = 1, selected = 1;
+const cell = (k, s) => {
+  switch (k) {
+    case "grid": return `<td class="txt"><span class="tag">${s.grid}</span></td>`;
+    case "desc": return `<td class="wrap">${s.desc}</td>`;
+    case "rank": return `<td>${s.rank}</td>`;
+    case "net": case "risk": return `<td${cls(COLS.find(c => c[0] === k)[2](s))}>${money(COLS.find(c => c[0] === k)[2](s))}</td>`;
+    case "n": case "w": return `<td>${fmt(COLS.find(c => c[0] === k)[2](s), 0)}</td>`;
+    case "tr": case "dd": return `<td${cls(COLS.find(c => c[0] === k)[2](s))}>${fmt(COLS.find(c => c[0] === k)[2](s), 1)}</td>`;
+    case "y": return `<td>${s.years_pos}/${s.years}</td>`;
+    default: { const v = COLS.find(c => c[0] === k)[2](s); return `<td${cls(v)}>${fmt(v)}</td>`; }
+  }
+};
+function renderTop20() {
+  const list = T.slice().sort((x, y) => {
+    const f = COLS.find(c => c[0] === sortKey)[2], u = f(x), v = f(y);
+    return (typeof u === "string" ? u.localeCompare(v) : u - v) * sortDir;
+  });
+  $("t20").innerHTML = `<thead><tr>${COLS.map(([k, n, , t]) => `<th data-k="${k}" class="${t ? "txt" : ""}">${n}${k === sortKey ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead><tbody>` +
+    list.map(s => `<tr data-r="${s.rank}" class="${s.rank === selected ? "sel" : ""}">${COLS.map(([k]) => cell(k, s)).join("")}</tr>`).join("") + "</tbody>";
+}
+$("t20").addEventListener("click", e => {
+  const th = e.target.closest("th");
+  if (th) { const k = th.dataset.k; sortDir = k === sortKey ? -sortDir : (k === "rank" || k === "grid" || k === "desc" ? 1 : -1); sortKey = k; renderTop20(); return; }
+  const tr = e.target.closest("tr[data-r]");
+  if (tr) { selected = +tr.dataset.r; renderTop20(); renderSel(); }
+});
+const selChart = new Chart($("sel"), { type: "line", data: { labels: M, datasets: [] },
+  options: { interaction: { mode: "index", intersect: false }, plugins: { vline: { label: splitMonth, text: "OOS →" },
+    tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { ticks: { maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "cumulative R" } } } } });
+function renderSel() {
+  const s = T.find(x => x.rank === selected), one = T[0];
+  $("sel-title").textContent = selected === 1 ? "#1 (click a row to compare)" : `#${s.rank} vs #1`;
+  selChart.data.datasets = [{ label: `#${s.rank} ${s.grid}`, data: s.eq, borderColor: C.s[0], backgroundColor: C.s[0], borderWidth: 2, pointRadius: 0 }];
+  if (selected !== 1) selChart.data.datasets.push({ label: "#1", data: one.eq, borderColor: C.muted, backgroundColor: C.muted, borderDash: [6, 4], borderWidth: 2, pointRadius: 0 });
+  selChart.update();
+}
+renderTop20(); renderSel();
+
+// ---------- example trades ----------
+const EX = D.examples, best = T[0];
+$("ex-note").innerHTML = `Three real trades from <b>#1</b> (${best.desc}). Thin gray band = each minute's high–low, line = 1m close, shaded box = the opening range. Pick a day:`;
+const exNames = { TP: "Winner: target hit", SL: "Loser: stopped out", EOD: "Closed at end of day" };
+$("ex-tabs").innerHTML = EX.map((e, i) => `<button data-i="${i}" class="${i ? "" : "on"}">${exNames[e.reason]} · ${e.date}</button>`).join("");
+$("ex-legend").innerHTML = `<span><span class="swatch" style="background:${C.muted}"></span>opening range</span><span><span class="swatch" style="background:${C.ink}"></span>entry</span><span><span class="swatch" style="background:${C.neg}"></span>stop</span><span><span class="swatch" style="background:${C.pos}"></span>target</span><span>◆ exit</span>`;
+const exDraw = { id: "exDraw", beforeDatasetsDraw(ch) {
+  const e = ch.$ex; if (!e) return;
+  const g = ch.ctx, X = ch.scales.x, Y = ch.scales.y, { left, right } = ch.chartArea;
+  g.save();
+  g.fillStyle = C.muted + "33"; g.strokeStyle = C.muted; g.lineWidth = 1;
+  const x0 = X.getPixelForValue(e.or_start), x1 = X.getPixelForValue(e.or_end), yH = Y.getPixelForValue(e.H), yL = Y.getPixelForValue(e.L);
+  g.fillRect(x0, yH, x1 - x0, yL - yH); g.strokeRect(x0, yH, x1 - x0, yL - yH);
+  g.fillStyle = C.ink2; g.font = "11px system-ui"; g.fillText("opening range", x0 + 3, yH - 4);
+  g.restore();
+}, afterDatasetsDraw(ch) {
+  const e = ch.$ex; if (!e) return;
+  const g = ch.ctx, X = ch.scales.x, Y = ch.scales.y, { right } = ch.chartArea;
+  const xa = X.getPixelForValue(e.entry_mod), xb = X.getPixelForValue(e.exit_mod);
+  const lvl = (v, col, txt, dash) => { const y = Y.getPixelForValue(v); g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(dash || []);
+    g.beginPath(); g.moveTo(xa, y); g.lineTo(xb, y); g.stroke(); g.setLineDash([]);
+    g.fillStyle = C.ink2; g.font = "11px system-ui"; const w = g.measureText(txt).width; g.fillText(txt, Math.min(xb + 4, right - w - 2), y - 3); };
+  g.save();
+  lvl(e.target, C.pos, `target ${fmt(e.target, 2)}`, [5, 3]);
+  lvl(e.stop, C.neg, `stop ${fmt(e.stop, 2)}`, [5, 3]);
+  lvl(e.entry, C.ink, `entry ${fmt(e.entry, 2)}`);
+  const dot = (x, y, col) => { g.fillStyle = col; g.strokeStyle = C.surface; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); g.stroke(); };
+  dot(xa, Y.getPixelForValue(e.entry), C.ink);
+  const ye = Y.getPixelForValue(e.exit); g.fillStyle = e.pnl >= 0 ? C.pos : C.neg; g.strokeStyle = C.surface; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(xb, ye - 7); g.lineTo(xb + 7, ye); g.lineTo(xb, ye + 7); g.lineTo(xb - 7, ye); g.closePath(); g.fill(); g.stroke();
+  g.restore();
+} };
+const exChart = new Chart($("exc"), { type: "line", plugins: [exDraw], data: { datasets: [] },
+  options: { parsing: false, interaction: { mode: "nearest", axis: "x", intersect: false },
+    plugins: { legend: { display: false }, tooltip: { filter: c => c.datasetIndex === 2, callbacks: { title: c => hm(c[0].parsed.x) + " New York",
+      label: c => { const b = exChart.$bars[c.dataIndex]; return [`open ${fmt(b[1])}  high ${fmt(b[2])}`, `low ${fmt(b[3])}  close ${fmt(b[4])}`]; } } } },
+    scales: { x: { type: "linear", ticks: { callback: v => hm(v), stepSize: 30, maxRotation: 0 }, grid: { display: false } }, y: { title: { display: true, text: "MNQ price" } } } } });
+function renderEx(i) {
+  const e = EX[i]; exChart.$ex = e; exChart.$bars = e.bars;
+  const pts = k => e.bars.map(b => ({ x: b[0], y: b[k] }));
+  exChart.data.datasets = [
+    { data: pts(3), borderWidth: 0, pointRadius: 0 },
+    { data: pts(2), borderWidth: 0, pointRadius: 0, fill: "-1", backgroundColor: C.muted + "40" },
+    { data: pts(4), borderColor: C.ink2, borderWidth: 1.5, pointRadius: 0 },
+  ];
+  const lo = Math.min(e.stop, e.target, ...e.bars.map(b => b[3])), hi = Math.max(e.stop, e.target, ...e.bars.map(b => b[2])), pad = (hi - lo) * 0.06;
+  exChart.options.scales.y.min = lo - pad; exChart.options.scales.y.max = hi + pad;
+  exChart.update();
+  document.querySelectorAll("#ex-tabs button").forEach(b => b.classList.toggle("on", +b.dataset.i === i));
+  const side = e.side > 0 ? "long" : "short", sgn = e.side > 0 ? "+" : "−";
+  const ref = e.entry - e.side * e.slip * e.tick;                         // signal price before slippage
+  const sizePts = Math.abs(ref - e.stop), perC = sizePts * e.pv + e.comm, raw = e.risk_usd / perC;
+  const riskPts = Math.abs(e.entry - e.stop), risk = (riskPts * e.pv + e.comm) * e.qty;
+  const trigger = e.entry_mode === "touch"
+    ? `price traded ${e.side > 0 ? "up through" : "down through"} ${fmt(e.side > 0 ? e.H + e.tick : e.L - e.tick)} (one tick ${e.side > 0 ? "above the high" : "below the low"}) at ${hm(e.entry_mod)}`
+    : `the 5-minute bar ending ${hm(e.entry_mod + 1)} closed at ${fmt(ref)}, ${e.side > 0 ? "above the range high" : "below the range low"}`;
+  const exitTxt = { TP: `price reached the target at ${hm(e.exit_mod)}; limit order fills at the target, no slippage`,
+                    SL: `price reached the stop at ${hm(e.exit_mod)}; filled 1 tick worse (${fmt(e.exit)})`,
+                    EOD: `still open at ${hm(e.exit_mod)}; closed at that minute's open, 1 tick worse (${fmt(e.exit)})` }[e.reason];
+  const L = [
+    ["Opening range", `${hm(e.or_start)}–${hm(e.or_end)}: high ${fmt(e.H)}, low ${fmt(e.L)} → ${fmt(e.H - e.L)} pts`],
+    ["Breakout", `${trigger} → go <b>${side}</b>`],
+    ["Entry fill", `${fmt(ref)} ${e.side > 0 ? "+" : "−"} 1 tick slippage (${e.tick}) = <b>${fmt(e.entry)}</b>`],
+    ["Stop", `other side of the range = <b>${fmt(e.stop)}</b> → ${fmt(riskPts)} pts from the fill`],
+    ["Size", `$${e.risk_usd} ÷ (${fmt(sizePts)} pts × $${e.pv} + $${e.comm}) = $${e.risk_usd} ÷ ${money(perC)} = ${fmt(raw)} → floor, max ${e.max_q} = <b>${e.qty} contract${e.qty > 1 ? "s" : ""}</b>`],
+    ["Target", `${fmt(e.entry)} ${sgn} ${e.rr} × ${fmt(riskPts)} = <b>${fmt(e.target)}</b>`],
+    ["Exit", `${exitTxt} → <b>${e.reason}</b>`],
+    ["$ P&amp;L", `(${fmt(e.exit)} − ${fmt(e.entry)}) × ${e.side > 0 ? "+1" : "−1"} × ${e.qty} × $${e.pv} − $${e.comm} × ${e.qty} = <b${cls(e.pnl)}>${money(e.pnl)}</b>`],
+    ["$ at risk (1R)", `(${fmt(riskPts)} × $${e.pv} + $${e.comm}) × ${e.qty} = ${money(risk)}`],
+    ["R", `${money(e.pnl)} ÷ ${money(risk)} = <b${cls(e.r)}>${fmt(e.r, 2)} R</b>`],
+  ];
+  if (e.qty * perC < e.risk_usd * 0.8) L.push(["Note", `Only ${money(risk)} was at risk, not $${e.risk_usd}: one contract already risks ${money(perC)}, and two would exceed the budget. That's why results are reported in R.`]);
+  $("ex-calc").innerHTML = L.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join("");
+}
+$("ex-tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) renderEx(+b.dataset.i); });
+renderEx(0);
+
+// ---------- validation ----------
+const t0 = new Date("2021-10-26"), t1 = new Date("2026-10-27"), span = t1 - t0;
+const pct = d => Math.max(0, Math.min(100, (new Date(d) - t0) / span * 100));
+const axis = () => `<div class="tl-axis"><div></div><div class="ticks">${[2022, 2023, 2024, 2025, 2026].map(y => `<span style="left:${pct(y + "-01-01")}%">${y}</span>`).join("")}</div><div></div></div>`;
+const seg = (a, b, col, title) => `<div class="tl-seg" title="${title}" style="left:${pct(a)}%;width:${pct(b) - pct(a)}%;background:${col}"></div>`;
+const split = D.splits["MNQ.v.0"];
+$("split-note").innerHTML = `Each setting's five years are cut at <b>${split}</b>. The first 70% (in-sample) is where a lucky setting looks great; the last 30% (out-of-sample) checks whether it kept working. The robust score is the <i>lower</i> of the two Sharpes.`;
+$("tl-split").innerHTML = axis() +
+  `<div class="tl-row"><div class="lbl">Every setting</div><div class="tl-track">${seg("2021-10-26", split, C.axis, "in-sample")}${seg(split, "2026-10-27", C.s[0], "out-of-sample")}</div><div class="val"></div></div>` +
+  T3.map((s, i) => `<div class="tl-row"><div class="lbl">#${s.rank} Sharpe IS / OOS</div><div class="tl-track">${seg("2021-10-26", split, C.axis, "in-sample")}${seg(split, "2026-10-27", C.s[i], "out-of-sample")}<span style="position:absolute;left:4px;top:0;font-size:11px;color:${C.ink}">${fmt(s.is_sharpe)}</span><span style="position:absolute;left:${pct(split) + 1}%;top:0;font-size:11px;color:${C.surface}">${fmt(s.oos_sharpe)}</span></div><div class="val">min ${fmt(s.robust)}</div></div>`).join("") +
+  `<div class="legend-inline"><span><span class="swatch" style="background:${C.axis}"></span>in-sample (70%)</span><span><span class="swatch" style="background:${C.s[0]}"></span>out-of-sample (30%)</span></div>`;
+const folds = wfNY.folds;
+$("tl-wf").innerHTML = axis() + folds.map((f, i) => {
+  const [a, b] = f.train.split(".."), [c, d] = f.test.split("..");
+  return `<div class="tl-row"><div class="lbl">Fold ${i + 1}</div><div class="tl-track">${seg(a, b, C.axis, "train: pick the best setting")}${seg(c, d, f.test_total_r >= 0 ? C.pos : C.neg, "test: trade it blind")}</div><div class="val${f.test_total_r < 0 ? " neg" : ""}">${fmt(f.test_total_r, 1)}R</div></div>`;
+}).join("") + `<div class="legend-inline"><span><span class="swatch" style="background:${C.axis}"></span>24 months to pick the setting</span><span><span class="swatch" style="background:${C.pos}"></span>6 months traded blind (made money)</span><span><span class="swatch" style="background:${C.neg}"></span>(lost money)</span><span>MNQ NY shown; total ${fmt(wfNY.total_r, 1)}R</span></div>`;
+$("wf-table").innerHTML = `<thead><tr><th>Walk-forward (blind), ${folds[0].test.split("..")[0]} → ${folds[folds.length - 1].test.split("..")[1]}</th><th>Trades</th><th>Total R</th><th>Net $</th><th>Losing folds</th></tr></thead><tbody>` +
+  Object.entries(WF).sort((x, y) => y[1].total_r - x[1].total_r).map(([k, w]) => `<tr><td>${k}</td><td>${w.trades}</td><td${cls(w.total_r)}>${fmt(w.total_r, 1)}</td><td${cls(w.net)}>${money(w.net)}</td><td>${w.folds.filter(f => f.test_total_r < 0).length} of ${w.folds.length}</td></tr>`).join("") + "</tbody>";
+
+const mk = { "MNQ London": [0, "circle"], "MNQ NY": [0, "triangle"], "MES London": [1, "circle"], "MES NY": [1, "triangle"] };
+const scDS = Object.entries(mk).map(([g, [ci, shape]]) => ({ label: g, pointStyle: shape, data: D.scatter.filter(r => r[0] === g).map(r => ({ x: r[1], y: r[2], g, sh: r[3], tr: r[4] })),
+  backgroundColor: C.s[ci] + "99", borderColor: C.s[ci], borderWidth: 0, pointRadius: 3.5, pointHoverRadius: 6 }));
+scDS.unshift({ label: "Top 3", data: T3.map(s => ({ x: s.is_sharpe, y: s.oos_sharpe, g: `#${s.rank} ${s.grid}`, sh: s.stats.sharpe, tr: s.stats.total_r })),
+  pointStyle: "circle", pointRadius: 9, pointHoverRadius: 10, backgroundColor: "transparent", borderColor: C.ink, borderWidth: 2 });
+new Chart($("sc"), { type: "scatter", data: { datasets: scDS },
+  options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => { const r = c.raw; return [`${r.g}`, `IS ${fmt(r.x)} · OOS ${fmt(r.y)} · 5y Sharpe ${fmt(r.sh)} · ${fmt(r.tr, 1)} R`]; } } } },
+    scales: { x: { ...zeroLine, title: { display: true, text: "in-sample Sharpe" } }, y: { ...zeroLine, title: { display: true, text: "out-of-sample Sharpe" } } } } });
+</script>
+</body>
+</html>

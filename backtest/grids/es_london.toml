@@ -1,0 +1,38 @@
+# ES version of grids/default.toml: London ORB, same grid, same validation, so results compare 1:1.
+# Prices: Databento ES.v.0 (full-size E-mini S&P 500, deepest book). Sizing/costs: MES micro
+# ($5/pt, $1.24 RT), the micro equivalent of the MNQ setup ($50k account, 1% risk, max 10).
+# `uv run orb grid grids/es_london.toml` -> results/es_london/   (MNQ results are untouched)
+
+[data]
+symbol = "ES.v.0"       # loads data/ES_v_0_1m.parquet
+
+[base]
+tz = "Etc/GMT-2"        # fixed UTC+2, same as the Pine script default
+entry_end = "11:00"
+hold_end = "22:00"
+# MNQ uses 10..80 pts. Measured 07:00-07:15 UTC+2 ranges 2021-2026: ES = MNQ / ~5.1 at every
+# percentile (p5/25/50/75/95: MNQ 5.25/9/14/22.9/50.6, ES 1/1.75/2.75/4.5/9), so 10..80 -> 2..16.
+min_range = 2.0
+max_range = 16
+point_value = 5.0       # MES $/pt (tick 0.25 = $1.25)
+tick = 0.25
+commission_rt = 1.24
+slippage_ticks = 1
+
+[grid]
+or_start = ["07:00", "08:00", "09:00", "10:00"]
+or_minutes = [5, 15, 30]
+entry = ["close", "touch"]
+signal_tf = [1, 5]
+stop = ["opposite", "mid"]
+rr = [1.0, 1.5, 2.0, 3.0]
+atr_max = [99.0, 0.25, 0.15]
+
+[validation]
+sort = "sharpe"
+min_trades_yr = 40
+oos_frac = 0.3
+
+[walkforward]
+train_months = 24
+test_months = 6

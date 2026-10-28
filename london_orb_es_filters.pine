@@ -1,0 +1,218 @@
+//@version=6
+// ES / MES version of london_orb_mnq_filters.pine (MNQ file left untouched). Same rules; size uses syminfo.pointvalue,
+// so run it on MES ($5/pt, the setup backtest/grids/es_*.toml models) or ES ($50/pt: needs a bigger account).
+// Commission defaults ($0.62/side, $1.24 RT) are MES rates; for full-size ES use about $2.10/side.
+strategy("London ORB · ES (Filters)", shorttitle = "LDN ORB ES F", overlay = true,
+     initial_capital = 50000, currency = currency.USD, pyramiding = 0,
+     commission_type = strategy.commission.cash_per_contract, commission_value = 0.62,
+     slippage = 1, process_orders_on_close = true, margin_long = 0, margin_short = 0,
+     max_boxes_count = 500)
+
+// Same rules as london_orb_mnq_strategy.pine plus optional entry filters (all off by default).
+// Commission (per contract, per side), slippage (ticks) and initial capital are set in the
+// strategy's Properties tab. margin = 0 so the broker emulator never shrinks the order size.
+
+// ───────────────────────────── Inputs ─────────────────────────────
+const string G_SES  = "Session"
+const string G_RISK = "Risk & position sizing"
+const string G_TRD  = "Trade rules"
+const string G_FLT  = "Entry filters"
+const string G_VIS  = "Display"
+
+tzInput      = input.string("UTC+2", "Timezone", group = G_SES, tooltip = "Fixed offsets like UTC+2 do not follow daylight saving. Use an IANA name (e.g. Europe/London) to follow DST.")
+orSession    = input.session("0700-0715:23456", "Opening range", group = G_SES)
+entrySession = input.session("0715-1100:23456", "Entry window", group = G_SES)
+holdSession  = input.session("0715-2200:23456", "Holding window", group = G_SES, tooltip = "An open trade is closed at the close of the last bar inside this window.")
+
+sizeBase     = input.string("Fixed account size", "Size risk from", options = ["Fixed account size", "Strategy equity"], group = G_RISK, tooltip = "Strategy equity compounds: risk grows after wins and shrinks after losses.")
+accountSize  = input.float(50000, "Account size ($)", minval = 100, step = 1000, group = G_RISK)
+riskPct      = input.float(1.0, "Risk per trade (%)", minval = 0.01, maxval = 10, step = 0.05, group = G_RISK)
+maxContracts = input.int(10, "Max contracts", minval = 1, group = G_RISK)
+commission   = input.float(1.24, "Round-trip cost per contract ($)", minval = 0, step = 0.01, group = G_RISK, tooltip = "Used only in the sizing math. Keep it in line with the commission in the Properties tab (per side × 2).")
+
+entryMode = input.string("Close", "Breakout trigger", options = ["Close", "Touch"], group = G_TRD, tooltip = "Close: market order at the close of the first bar that closes outside the range.\nTouch: stop orders one tick beyond the range edges (OCA, first fill cancels the other).")
+stopMode  = input.string("Opposite side", "Stop placement", options = ["Opposite side", "Range midpoint"], group = G_TRD)
+rrTarget  = input.float(2.0, "Target (R multiple)", minval = 0.25, step = 0.25, group = G_TRD)
+minRange  = input.float(2.0, "Min range (pts)", minval = 0, step = 0.25, group = G_TRD, tooltip = "ES-scaled: the MNQ scripts use 10..80. ES opening ranges are about 1/5 of MNQ's (2021-2026).")
+maxRange  = input.float(16, "Max range (pts)", minval = 0, step = 0.25, group = G_TRD)
+
+filterMode = input.string("Wait for filtered breakout", "When a breakout fails the filters", options = ["Wait for filtered breakout", "Skip the day"], group = G_FLT,
+     tooltip = "Wait: keep looking for a later breakout bar that passes.\nSkip: if the first breakout fails, no trade today (Close trigger only).\nTouch trigger: filters are checked on the bar before the stop orders are placed.")
+useVwap   = input.bool(false, "VWAP: long above / short below", group = G_FLT)
+useEma    = input.bool(false, "EMA: price on trend side", inline = "ema", group = G_FLT)
+emaLen    = input.int(50, "", minval = 1, inline = "ema", group = G_FLT)
+useEmaX   = input.bool(false, "EMA stack: fast vs slow", inline = "emax", group = G_FLT)
+emaFast   = input.int(50, "", minval = 1, inline = "emax", group = G_FLT)
+emaSlow   = input.int(200, "", minval = 2, inline = "emax", group = G_FLT)
+rsiMode   = input.string("Off", "RSI(14)", options = ["Off", "Momentum", "Not stretched"], inline = "rsi", group = G_FLT,
+     tooltip = "Momentum: long RSI > level, short RSI < 100 − level.\nNot stretched: long RSI < level, short RSI > 100 − level.")
+rsiLevel  = input.float(60, "", minval = 0, maxval = 100, inline = "rsi", group = G_FLT)
+macdMode  = input.string("Off", "MACD(12,26,9)", options = ["Off", "Line vs signal", "Line vs zero"], group = G_FLT)
+useFvg    = input.bool(false, "FVG in trade direction within last N bars", inline = "fvg", group = G_FLT)
+fvgBars   = input.int(2, "", minval = 1, inline = "fvg", group = G_FLT)
+useAtr    = input.bool(false, "Range ÷ daily ATR(14) between", inline = "atr", group = G_FLT)
+atrMin    = input.float(0.0, "", minval = 0, step = 0.01, inline = "atr", group = G_FLT)
+atrMax    = input.float(0.15, "", minval = 0, step = 0.01, inline = "atr", group = G_FLT)
+
+colRange = input.color(color.new(color.gray, 85), "Range fill", group = G_VIS)
+colLong  = input.color(color.teal, "Target", group = G_VIS)
+colShort = input.color(color.red, "Stop", group = G_VIS)
+
+// ───────────────────────────── Guards ─────────────────────────────
+bool  isES    = syminfo.root == "MES" or syminfo.root == "ES"
+float pv      = syminfo.pointvalue    // $5/pt on MES, $50/pt on ES: size follows the chart's contract
+int   tfSec   = timeframe.in_seconds()
+bool  tfOK    = timeframe.isintraday and tfSec <= 900 and 900 % tfSec == 0
+bool  enabled = isES and tfOK
+
+if barstate.islast and not enabled
+    runtime.error(isES ? "Use a timeframe of 15 minutes or less that divides 15 (1, 3, 5, 15)." : "This strategy is for MES/ES only.")
+
+// ───────────────────────────── Sessions ─────────────────────────────
+// Orders are processed on bar close, so decisions look one bar ahead (bars_back = -1).
+bool inOR      = not na(time(timeframe.period, orSession, tzInput))
+bool orStart   = inOR and not inOR[1]
+bool orLast    = inOR and na(time(timeframe.period, orSession, tzInput, bars_back = -1))
+bool inEntry   = not na(time(timeframe.period, entrySession, tzInput))
+bool entryNext = not na(time(timeframe.period, entrySession, tzInput, bars_back = -1))
+bool holdNext  = not na(time(timeframe.period, holdSession, tzInput, bars_back = -1))
+
+float riskUSD = (sizeBase == "Strategy equity" ? strategy.equity : accountSize) * riskPct / 100
+
+// Contracts such that (stop distance × $/pt + costs) × qty ≤ risk budget.
+sizeFor(float stopPts) =>
+    float perContract = stopPts * pv + commission
+    stopPts > 0 and perContract > 0 ? math.min(maxContracts, math.floor(riskUSD / perContract)) : 0
+
+// ───────────────────────────── Filters ─────────────────────────────
+float vwapV = ta.vwap(hlc3)
+float emaV  = ta.ema(close, emaLen)
+float emaF  = ta.ema(close, emaFast)
+float emaS  = ta.ema(close, emaSlow)
+float rsiV  = ta.rsi(close, 14)
+[macdLine, macdSig, _] = ta.macd(close, 12, 26, 9)
+bool  fvgBull = low > high[2]
+bool  fvgBear = high < low[2]
+bool  fvgBullRecent = math.sum(fvgBull ? 1 : 0, fvgBars) > 0
+bool  fvgBearRecent = math.sum(fvgBear ? 1 : 0, fvgBars) > 0
+float dailyAtr = request.security(syminfo.tickerid, "D", ta.atr(14)[1], lookahead = barmerge.lookahead_on)  // prior completed day, no repaint
+
+bool longOK = (not useVwap or close > vwapV) and (not useEma or close > emaV) and (not useEmaX or emaF > emaS)
+     and (rsiMode == "Off" or (rsiMode == "Momentum" ? rsiV > rsiLevel : rsiV < rsiLevel))
+     and (macdMode == "Off" or (macdMode == "Line vs signal" ? macdLine > macdSig : macdLine > 0))
+     and (not useFvg or fvgBullRecent)
+bool shortOK = (not useVwap or close < vwapV) and (not useEma or close < emaV) and (not useEmaX or emaF < emaS)
+     and (rsiMode == "Off" or (rsiMode == "Momentum" ? rsiV < 100 - rsiLevel : rsiV > 100 - rsiLevel))
+     and (macdMode == "Off" or (macdMode == "Line vs signal" ? macdLine < macdSig : macdLine < 0))
+     and (not useFvg or fvgBearRecent)
+
+// ───────────────────────────── State ─────────────────────────────
+var float orHigh        = na
+var float orLow         = na
+var bool  orReady       = false
+var bool  rangeOK       = false
+var bool  tradedToday   = false
+var int   closedAtStart = 0
+var float slLong        = na
+var float slShort       = na
+var box   orBox         = na
+
+// ───────────────────────────── Opening range ─────────────────────────────
+if orStart
+    orHigh        := high
+    orLow         := low
+    orReady       := false
+    rangeOK       := false
+    tradedToday   := false
+    closedAtStart := strategy.closedtrades
+    if isES
+        orBox := box.new(bar_index, high, bar_index, low, border_color = color.new(color.gray, 50), bgcolor = colRange)
+else if inOR and not orReady
+    orHigh := math.max(orHigh, high)
+    orLow  := math.min(orLow, low)
+
+if inOR and not na(orBox)
+    box.set_top(orBox, orHigh)
+    box.set_bottom(orBox, orLow)
+
+if (inOR or (orReady and inEntry)) and not na(orBox)
+    box.set_right(orBox, bar_index)
+
+if orLast and not na(orHigh)
+    orReady := true
+    float rng = orHigh - orLow
+    rangeOK := rng >= minRange and rng <= maxRange and (not useAtr or (not na(dailyAtr) and rng / dailyAtr >= atrMin and rng / dailyAtr <= atrMax))
+    float mid = (orHigh + orLow) / 2
+    slLong  := stopMode == "Opposite side" ? orLow  : mid
+    slShort := stopMode == "Opposite side" ? orHigh : mid
+
+// Once a position has been opened today (even if already closed), the day is done.
+if strategy.position_size != 0 or strategy.closedtrades > closedAtStart
+    tradedToday := true
+
+bool flat     = strategy.position_size == 0
+bool canTrade = enabled and orReady and rangeOK and not tradedToday and flat
+
+// ───────────────────────────── Entries (max 1 per day) ─────────────────────────────
+if entryMode == "Close" and canTrade and inEntry
+    bool rawUp   = close > orHigh
+    bool rawDn   = close < orLow
+    bool upBreak = rawUp and longOK
+    bool dnBreak = rawDn and shortOK
+    if upBreak != dnBreak
+        int   d  = upBreak ? 1 : -1
+        float sl = d == 1 ? slLong : slShort
+        float rp = math.abs(close - sl)
+        int   n  = sizeFor(rp)
+        tradedToday := true          // a skipped day (size < 1) is also done
+        if n >= 1
+            strategy.entry(d == 1 ? "Long" : "Short", d == 1 ? strategy.long : strategy.short, qty = n,
+                           alert_message = (d == 1 ? "LONG " : "SHORT ") + str.tostring(n) + " " + syminfo.root)
+            strategy.exit(d == 1 ? "XL" : "XS", d == 1 ? "Long" : "Short", stop = sl, limit = close + d * rrTarget * rp)
+    else if (rawUp or rawDn) and filterMode == "Skip the day"
+        tradedToday := true
+
+if entryMode == "Touch"
+    if canTrade and entryNext
+        float eL = orHigh + syminfo.mintick
+        float eS = orLow - syminfo.mintick
+        int   nL = longOK  ? sizeFor(eL - slLong)  : 0
+        int   nS = shortOK ? sizeFor(slShort - eS) : 0
+        if nL >= 1
+            strategy.entry("Long", strategy.long, qty = nL, stop = eL, oca_name = "ORB", oca_type = strategy.oca.cancel, alert_message = "LONG " + str.tostring(nL) + " " + syminfo.root)
+            strategy.exit("XL", "Long", stop = slLong, limit = eL + rrTarget * (eL - slLong))
+        else
+            strategy.cancel("Long")
+        if nS >= 1
+            strategy.entry("Short", strategy.short, qty = nS, stop = eS, oca_name = "ORB", oca_type = strategy.oca.cancel, alert_message = "SHORT " + str.tostring(nS) + " " + syminfo.root)
+            strategy.exit("XS", "Short", stop = slShort, limit = eS - rrTarget * (slShort - eS))
+        else
+            strategy.cancel("Short")
+    else
+        strategy.cancel("Long")
+        strategy.cancel("Short")
+
+// ───────────────────────────── Manage open trade ─────────────────────────────
+// Re-anchor the target to the actual fill price (gaps, slippage).
+if strategy.position_size > 0
+    float ep = strategy.position_avg_price
+    strategy.exit("XL", "Long", stop = slLong, limit = ep + rrTarget * math.abs(ep - slLong))
+else if strategy.position_size < 0
+    float ep = strategy.position_avg_price
+    strategy.exit("XS", "Short", stop = slShort, limit = ep - rrTarget * math.abs(slShort - ep))
+
+if strategy.position_size != 0 and not holdNext
+    strategy.close_all(comment = "EOD")
+
+// ───────────────────────────── Plots ─────────────────────────────
+bool  inPos = strategy.position_size != 0
+float avgPx = strategy.position_avg_price
+float stopP = strategy.position_size > 0 ? slLong : strategy.position_size < 0 ? slShort : na
+float tgtP  = inPos ? avgPx + math.sign(strategy.position_size) * rrTarget * math.abs(avgPx - stopP) : na
+plot(inPos ? stopP : na, "Stop",   colShort, style = plot.style_linebr, linewidth = 2)
+plot(inPos ? tgtP  : na, "Target", colLong,  style = plot.style_linebr, linewidth = 2)
+plot(inPos ? avgPx : na, "Entry",  color.gray, style = plot.style_linebr)
+plot(useVwap ? vwapV : na, "VWAP", color.orange)
+plot(useEma ? emaV : na, "EMA", color.blue)
+plot(useEmaX ? emaF : na, "EMA fast", color.aqua)
+plot(useEmaX ? emaS : na, "EMA slow", color.purple)

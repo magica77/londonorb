@@ -1,0 +1,36 @@
+# ES version of grids/ny_open.toml: US cash-open ORB, same grid and validation as MNQ.
+# Prices: Databento ES.v.0. Sizing/costs: MES micro ($5/pt, $1.24 RT, $50k, 1% risk, max 10).
+# Points range filter off, like MNQ NY (sizing still caps risk at 1%).
+# `uv run orb grid grids/es_ny_open.toml` -> results/es_ny_open/   (MNQ results are untouched)
+
+[data]
+symbol = "ES.v.0"
+
+[base]
+tz = "America/New_York"
+or_start = "09:30"
+entry_end = "12:00"
+hold_end = "15:55"
+min_range = 0
+max_range = 1000
+point_value = 5.0
+tick = 0.25
+commission_rt = 1.24
+slippage_ticks = 1
+
+[grid]
+or_minutes = [5, 10, 15, 20, 30, 45, 60]
+entry = ["close", "touch"]
+signal_tf = [1, 5]
+stop = ["opposite", "mid"]
+rr = [1.0, 1.5, 2.0, 3.0]
+hold_end = ["12:00", "15:55"]
+
+[validation]
+sort = "sharpe"
+min_trades_yr = 40
+oos_frac = 0.3
+
+[walkforward]
+train_months = 24
+test_months = 6

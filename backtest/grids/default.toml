@@ -1,0 +1,30 @@
+# Grid spec for `uv run orb grid grids/default.toml`.
+# [base]: fixed parameters (anything in orb.engine.Params). [grid]: lists to sweep (cartesian product).
+# Configs where the opening range ends after entry_end are dropped; touch-entry configs ignore signal_tf.
+
+[base]
+tz = "Etc/GMT-2"        # fixed UTC+2, same as the Pine script default
+entry_end = "11:00"
+hold_end = "22:00"
+min_range = 10
+max_range = 80
+commission_rt = 1.24
+slippage_ticks = 1
+
+[grid]
+or_start = ["07:00", "08:00", "09:00", "10:00"]
+or_minutes = [5, 15, 30]
+entry = ["close", "touch"]
+signal_tf = [1, 5]
+stop = ["opposite", "mid"]
+rr = [1.0, 1.5, 2.0, 3.0]
+atr_max = [99.0, 0.25, 0.15]
+
+[validation]
+sort = "sharpe"          # any metric: sharpe | total_r | avg_r | pf | net | cagr_pct
+min_trades_yr = 40       # ignore configs that trade too rarely
+oos_frac = 0.3           # last 30% of days are out-of-sample (or set oos_start = "2025-01-01")
+
+[walkforward]
+train_months = 24
+test_months = 6

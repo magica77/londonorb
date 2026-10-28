@@ -1,0 +1,29 @@
+# Last-hour ORB on MNQ: opening range from 15:00 New York (12:00 Pacific, DST-aware), flat at the 16:00 cash close.
+# Same engine and rules as the NY open; only the session moves. Points range filter off (sizing caps risk at 1%).
+# `uv run orb grid grids/ny_close.toml` -> results/ny_close/
+[base]
+tz = "America/New_York"
+or_start = "15:00"
+entry_end = "15:50"
+hold_end = "16:00"
+min_range = 0
+max_range = 1000
+commission_rt = 1.24
+slippage_ticks = 1
+
+[grid]
+or_minutes = [5, 10, 15, 20, 30]
+entry = ["close", "touch"]
+signal_tf = [1, 5]
+stop = ["opposite", "mid"]
+rr = [1.0, 1.5, 2.0, 3.0]
+hold_end = ["15:55", "16:00"]
+
+[validation]
+sort = "sharpe"
+min_trades_yr = 40
+oos_frac = 0.3
+
+[walkforward]
+train_months = 24
+test_months = 6

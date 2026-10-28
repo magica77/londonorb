@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ES ORB Results</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --pos: #2a78d6; --neg: #e34948; --hl: #eb6834;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --pos: #3987e5; --neg: #e66767; --hl: #d95926;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --pos: #3987e5; --neg: #e66767; --hl: #d95926;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 16px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 18px; margin: 0 0 4px; }
+nav a { color: var(--ink2); margin-right: 14px; text-decoration: none; white-space: nowrap; }
+nav a:hover { color: var(--ink); text-decoration: underline; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+h2 { font-size: 16px; margin: 0 0 6px; }
+p.note, .note { color: var(--ink2); margin: 4px 0 12px; max-width: 900px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.tile .name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.tile .big { font-size: 24px; margin: 4px 0; }
+.tile .row { color: var(--ink2); font-variant-numeric: tabular-nums; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+.chart { position: relative; height: 360px; }
+.chart.sm { height: 220px; }
+.small-multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.small-multiples h3 { font-size: 13px; margin: 0 0 4px; color: var(--ink2); font-weight: 600; }
+ul.findings { margin: 0; padding-left: 20px; max-width: 950px; }
+ul.findings li { margin-bottom: 6px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+.controls label { color: var(--ink2); font-size: 13px; }
+select, input { font: inherit; background: var(--surface); color: var(--ink); border: 1px solid var(--axis); border-radius: 4px; padding: 3px 6px; }
+.table-wrap { overflow: auto; max-height: 460px; border: 1px solid var(--border); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink2); font-weight: 600; cursor: pointer; user-select: none; }
+th:first-child, td:first-child { text-align: left; }
+td.txt { text-align: left; }
+#wf-table td.txt { white-space: normal; min-width: 280px; }
+tr.sel td { background: color-mix(in srgb, var(--hl) 18%, transparent); }
+tbody tr:hover td { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+tbody tr { cursor: default; }
+#grid-table tbody tr { cursor: pointer; }
+.neg { color: var(--neg); }
+.meta { color: var(--muted); font-size: 12px; }
+@media (max-width: 600px) { .chart { height: 280px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>London &amp; NY ORB · ES backtest results (MES sizing: $5/pt)</h1>
+  <nav>
+    <a href="#findings">Findings</a><a href="#equity">Equity</a><a href="#years">By year</a>
+    <a href="#sensitivity">Parameters</a><a href="#isoos">IS vs OOS</a><a href="#explorer">Grid explorer</a>
+    <a href="#wf">Walk-forward</a><a href="#trades">Trades</a><a href="#data">Data</a><a href="../best/index.html"><b>Best strategies</b></a>
+  </nav>
+</header>
+<main>
+
+<section id="findings">
+  <h2>Findings</h2>
+  <p class="meta" id="meta"></p>
+  <div class="tiles" id="tiles"></div>
+  <h2 style="margin-top:16px">What this means</h2>
+  <ul class="findings" id="findings-list"></ul>
+</section>
+
+<section id="equity">
+  <h2>Equity curves (cumulative R)</h2>
+  <p class="note">Cumulative R per trading day. 1R is the planned risk per trade (about 1% of the account). The dashed line marks the in-sample / out-of-sample split. The walk-forward line starts after its first 24-month training window.</p>
+  <div class="controls">
+    <label><input type="radio" name="equnit" value="r" checked> R</label>
+    <label><input type="radio" name="equnit" value="usd"> $ (fixed $50k account)</label>
+  </div>
+  <div class="chart"><canvas id="eq-chart"></canvas></div>
+</section>
+
+<section id="years">
+  <h2>R by year</h2>
+  <p class="note">Total R per calendar year for each featured config.</p>
+  <div class="chart"><canvas id="year-chart"></canvas></div>
+  <div class="table-wrap" style="margin-top:10px"><table id="year-table"></table></div>
+</section>
+
+<section id="sensitivity">
+  <h2>Parameter sensitivity</h2>
+  <p class="note">For each parameter value, the average R per trade across every grid config that uses it, in-sample vs out-of-sample. A value that helps in both periods is a pattern; one that only helps in-sample is likely noise.</p>
+  <div class="small-multiples" id="sens"></div>
+</section>
+
+<section id="isoos">
+  <h2>Does in-sample performance predict out-of-sample?</h2>
+  <p class="note" id="isoos-note"></p>
+  <div class="chart"><canvas id="scatter"></canvas></div>
+</section>
+
+<section id="explorer">
+  <h2>Grid explorer</h2>
+  <p class="note">Every config in the grid. Filter by parameter, click a column header to sort, and click a row to plot its monthly cumulative R against the Pine default. Points clicked in the scatter above select rows here too.</p>
+  <div class="controls" id="grid-filters"></div>
+  <div class="chart sm"><canvas id="cfg-chart"></canvas></div>
+  <p class="meta" id="grid-count"></p>
+  <div class="table-wrap"><table id="grid-table"></table></div>
+</section>
+
+<section id="wf">
+  <h2>Walk-forward</h2>
+  <p class="note" id="wf-note"></p>
+  <div class="chart sm"><canvas id="wf-chart"></canvas></div>
+  <div class="table-wrap" style="margin-top:10px"><table id="wf-table"></table></div>
+</section>
+
+<section id="trades">
+  <h2>Trades</h2>
+  <div class="controls">
+    <label>Config <select id="tr-cfg"></select></label>
+    <label>Year <select id="tr-year"></select></label>
+    <label>Side <select id="tr-side"><option value="">All</option><option value="1">Long</option><option value="-1">Short</option></select></label>
+    <label>Exit <select id="tr-reason"><option value="">All</option><option>SL</option><option>TP</option><option>EOD</option></select></label>
+  </div>
+  <p class="meta" id="tr-summary"></p>
+  <div class="chart sm"><canvas id="tr-chart"></canvas></div>
+  <div class="table-wrap" style="margin-top:10px"><table id="tr-table"></table></div>
+</section>
+
+<section id="data">
+  <h2>Data</h2>
+  <p class="note">Databento GLBX.MDP3 ohlcv-1m, ES.v.0 (front month by volume, unadjusted prices). P&amp;L uses MES contract terms: $5/pt, $1.24 round trip.</p>
+  <div class="table-wrap" style="max-height:none"><table id="dq-table"></table></div>
+  <h3 style="font-size:13px;color:var(--ink2);margin:14px 0 4px">ES daily close (unadjusted, contract rolls visible as small jumps)</h3>
+  <div class="chart sm"><canvas id="px-chart"></canvas></div>
+</section>
+
+</main>
+<script>
+"use strict";
+const D = window.DATA;
+if (!D) document.querySelector("main").innerHTML = "<section><h2>No data</h2><p>Run <code>uv run python web/build.py</code> in <code>backtest/</code> first.</p></section>";
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = { ink: css("--ink"), ink2: css("--ink2"), muted: css("--muted"), grid: css("--grid"), axis: css("--axis"),
+            s: [css("--s1"), css("--s2"), css("--s3"), css("--s4")], pos: css("--pos"), neg: css("--neg"), hl: css("--hl"), surface: css("--surface") };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => location.reload());
+
+Chart.defaults.color = C.muted;
+Chart.defaults.borderColor = C.grid;
+Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+Chart.defaults.plugins.legend.labels.color = C.ink2;
+Chart.defaults.plugins.legend.labels.boxWidth = 10;
+Chart.defaults.plugins.legend.labels.boxHeight = 10;
+Chart.defaults.plugins.tooltip.backgroundColor = C.surface;
+Chart.defaults.plugins.tooltip.titleColor = C.ink;
+Chart.defaults.plugins.tooltip.bodyColor = C.ink2;
+Chart.defaults.plugins.tooltip.borderColor = C.axis;
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.maintainAspectRatio = false;
+Chart.defaults.animation = false;
+
+const fmt = (v, d = 2) => v == null ? "—" : Number(v).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const money = v => v == null ? "—" : (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+const cls = v => v != null && v < 0 ? ' class="neg"' : "";
+const $ = id => document.getElementById(id);
+const TC = Object.fromEntries(D.trade_cols.map((c, i) => [c, i]));
+
+// vertical dashed line plugin (IS/OOS split)
+const vline = { id: "vline", afterDatasetsDraw(ch, _a, opts) {
+  if (!opts || opts.label == null) return;
+  const x = ch.scales.x.getPixelForValue(opts.label);
+  if (x == null || isNaN(x)) return;
+  const { top, bottom } = ch.chartArea, g = ch.ctx;
+  g.save(); g.strokeStyle = C.muted; g.setLineDash([4, 4]); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(x, top); g.lineTo(x, bottom); g.stroke();
+  g.fillStyle = C.ink2; g.font = "12px system-ui"; g.fillText(opts.text || "", x + 4, top + 12); g.restore();
+} };
+Chart.register(vline);
+
+const zeroLine = { grid: { color: c => c.tick && c.tick.value === 0 ? C.axis : C.grid } };
+
+// ---------- findings ----------
+const F = D.featured;
+const byName = Object.fromEntries(F.map(f => [f.name, f]));
+$("meta").textContent = `Generated ${D.generated} · grid ${D.spec} · in-sample before ${D.split}, out-of-sample after · `
+  + `${D.quality.weekdays} weekdays, ${D.quality.first.slice(0, 10)} → ${D.quality.last.slice(0, 10)}`;
+$("tiles").innerHTML = F.map((f, i) => `
+  <div class="tile"><div class="name"><span class="swatch" style="background:${C.s[i]}"></span>${f.name}</div>
+  <div class="big${f.stats.total_r < 0 ? " neg" : ""}">${fmt(f.stats.total_r, 1)} R</div>
+  <div class="row">${f.stats.trades} trades · win ${fmt(f.stats.win_pct, 1)}% · PF ${fmt(f.stats.pf)}</div>
+  <div class="row">Sharpe ${fmt(f.stats.sharpe)} · net ${money(f.stats.net)} · max DD ${fmt(f.stats.max_dd_r, 1)} R</div>
+  <div class="row meta">${f.stats.period.replace("->", "→")}</div></div>`).join("");
+
+const yearR = f => { const m = {}; for (const t of f.trades) { const y = t[TC.date].slice(0, 4); m[y] = (m[y] || 0) + t[TC.r]; } return m; };
+const pine = F[0], cand = F[1], ny = F[2], wf = F[3];
+const nyr = yearR(ny);
+const pyr = yearR(pine);
+const pre26 = Object.entries(pyr).filter(([y]) => y < "2026").reduce((s, [, v]) => s + v, 0);
+const cyr = yearR(cand);
+const bestYear = Object.entries(cyr).sort((a, b) => b[1] - a[1])[0];
+
+
+// ---------- equity ----------
+const allDates = [...new Set(F.flatMap(f => f.trades.map(t => t[TC.date])))].sort();
+function curve(f, key) {
+  const m = {}; for (const t of f.trades) m[t[TC.date]] = (m[t[TC.date]] || 0) + t[TC[key]];
+  const first = f.trades.length ? f.trades[0][TC.date] : null;
+  let c = 0; return allDates.map(d => { if (first && d < first && f.name === wf.name) return null; c += m[d] || 0; return +c.toFixed(2); });
+}
+const splitLabel = allDates.find(d => d >= D.split);
+const eqChart = new Chart($("eq-chart"), {
+  type: "line",
+  data: { labels: allDates, datasets: F.map((f, i) => ({ label: f.name, data: curve(f, "r"), borderColor: C.s[i], backgroundColor: C.s[i],
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: false })) },
+  options: { interaction: { mode: "index", intersect: false },
+    plugins: { vline: { label: splitLabel, text: "← in-sample | out-of-sample →" },
+               tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y, 1)}` } } },
+    scales: { x: { ticks: { maxTicksLimit: 12, maxRotation: 0 }, grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "cumulative R" } } } },
+});
+document.querySelectorAll('input[name="equnit"]').forEach(r => r.addEventListener("change", e => {
+  const usd = e.target.value === "usd";
+  eqChart.data.datasets.forEach((ds, i) => ds.data = curve(F[i], usd ? "pnl" : "r"));
+  eqChart.options.scales.y.title.text = usd ? "cumulative $" : "cumulative R";
+  eqChart.update();
+}));
+
+// ---------- by year ----------
+const years = [...new Set(allDates.map(d => d.slice(0, 4)))];
+const yrs = F.map(yearR);
+new Chart($("year-chart"), {
+  type: "bar",
+  data: { labels: years, datasets: F.map((f, i) => ({ label: f.name, data: years.map(y => yrs[i][y] ?? null), backgroundColor: C.s[i],
+          borderRadius: 4, borderSkipped: false, categoryPercentage: 0.8, barPercentage: 0.9 })) },
+  options: { plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "R" } } } },
+});
+$("year-table").innerHTML = `<thead><tr><th>Config</th>${years.map(y => `<th>${y}</th>`).join("")}<th>Total</th></tr></thead><tbody>` +
+  F.map((f, i) => `<tr><td>${f.name}</td>${years.map(y => yrs[i][y] == null ? "<td>—</td>" : `<td${cls(yrs[i][y])}>${fmt(yrs[i][y], 1)}</td>`).join("")}<td${cls(f.stats.total_r)}><b>${fmt(f.stats.total_r, 1)}</b></td></tr>`).join("") + "</tbody>";
+
+// ---------- sensitivity ----------
+const G = D.grid, gi = Object.fromEntries(G.cols.map((c, i) => [c, i]));
+const minTy = D.validation.min_trades_yr;
+const okRows = G.rows.filter(r => (r[gi.is_trades_yr] ?? 0) >= minTy);
+$("sens").innerHTML = G.varied.map(p => `<div><h3>${p}</h3><div class="chart sm"><canvas id="sens-${p}"></canvas></div></div>`).join("");
+for (const p of G.varied) {
+  const vals = [...new Set(G.rows.map(r => r[gi[p]]))].sort((a, b) => (typeof a === "number" ? a - b : String(a).localeCompare(String(b))));
+  const avg = (v, col) => { const xs = okRows.filter(r => r[gi[p]] === v).map(r => r[gi[col]]).filter(x => x != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+  new Chart($(`sens-${p}`), {
+    type: "bar",
+    data: { labels: vals.map(String), datasets: [
+      { label: "in-sample", data: vals.map(v => avg(v, "is_avg_r")), backgroundColor: C.s[0], borderRadius: 4, borderSkipped: false },
+      { label: "out-of-sample", data: vals.map(v => avg(v, "oos_avg_r")), backgroundColor: C.s[1], borderRadius: 4, borderSkipped: false } ] },
+    options: { plugins: { legend: { position: "bottom" }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y, 3)} R/trade` } } },
+      scales: { x: { grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "avg R / trade" } } } },
+  });
+}
+
+// ---------- IS vs OOS scatter ----------
+const sk = D.validation.sort;
+$("isoos-note").innerHTML = `Each dot is one grid config (with at least ${minTy} trades a year): in-sample ${sk} (x) vs out-of-sample ${sk} (y). If optimising worked, the dots would slope up and to the right. Rank correlation = <b>${fmt(D.validation.rank_corr)}</b>, close to a shapeless cloud, so the best in-sample configs are mostly luck. Click a dot to open it in the grid explorer.`;
+const rowIndex = G.rows.map((_, i) => i).filter(i => (G.rows[i][gi.is_trades_yr] ?? 0) >= minTy);
+const scatter = new Chart($("scatter"), {
+  type: "scatter",
+  data: { datasets: [
+    { label: "selected", data: [], backgroundColor: C.hl, borderColor: C.surface, borderWidth: 2, pointRadius: 8 },
+    { label: "grid configs", data: rowIndex.map(i => ({ x: G.rows[i][gi[`is_${sk}`]], y: G.rows[i][gi[`oos_${sk}`]], i })),
+      backgroundColor: C.s[0] + "99", borderColor: C.surface, borderWidth: 1, pointRadius: 4, pointHoverRadius: 7 } ] },
+  options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => {
+      const r = G.rows[c.raw.i]; return G.varied.map(p => `${p}=${r[gi[p]]}`).join(", ") + ` · IS ${fmt(c.raw.x)} · OOS ${fmt(c.raw.y)}`; } } } },
+    onClick: (_e, els) => { const el = els.find(e => e.datasetIndex === 1); if (el) selectConfig(scatter.data.datasets[1].data[el.index].i, true); },
+    scales: { x: { ...zeroLine, title: { display: true, text: `in-sample ${sk}` } }, y: { ...zeroLine, title: { display: true, text: `out-of-sample ${sk}` } } } },
+});
+
+// ---------- grid explorer ----------
+const showCols = [...G.varied, `is_${sk}`, "is_trades_yr", "is_total_r", "is_avg_r", `oos_${sk}`, "oos_total_r", "oos_avg_r", "oos_pf", "all_total_r", "all_max_dd_r"];
+const filt = {};
+$("grid-filters").innerHTML = G.varied.map(p => {
+  const vals = [...new Set(G.rows.map(r => r[gi[p]]))].sort((a, b) => (typeof a === "number" ? a - b : String(a).localeCompare(String(b))));
+  return `<label>${p} <select data-p="${p}"><option value="">any</option>${vals.map(v => `<option>${v}</option>`).join("")}</select></label>`;
+}).join("") + `<label><input type="checkbox" id="min-tr" checked> ≥ ${minTy} trades/yr</label>`;
+let sortCol = `is_${sk}`, sortDir = -1, selected = null;
+document.querySelectorAll("#grid-filters select").forEach(s => s.addEventListener("change", () => { filt[s.dataset.p] = s.value; renderGrid(); }));
+$("min-tr").addEventListener("change", renderGrid);
+function renderGrid() {
+  let idx = G.rows.map((_, i) => i).filter(i => G.varied.every(p => !filt[p] || String(G.rows[i][gi[p]]) === filt[p]));
+  if ($("min-tr").checked) idx = idx.filter(i => (G.rows[i][gi.is_trades_yr] ?? 0) >= minTy);
+  idx.sort((a, b) => { const x = G.rows[a][gi[sortCol]], y = G.rows[b][gi[sortCol]];
+    if (x == null) return 1; if (y == null) return -1; return (typeof x === "number" ? x - y : String(x).localeCompare(String(y))) * sortDir; });
+  $("grid-count").textContent = `${idx.length} configs${idx.length > 300 ? " (showing first 300)" : ""} · sorted by ${sortCol} ${sortDir < 0 ? "↓" : "↑"}`;
+  $("grid-table").innerHTML = `<thead><tr>${showCols.map(c => `<th data-c="${c}">${c}${c === sortCol ? (sortDir < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead><tbody>` +
+    idx.slice(0, 300).map(i => `<tr data-i="${i}"${i === selected ? ' class="sel"' : ""}>${showCols.map(c => {
+      const v = G.rows[i][gi[c]]; return typeof v === "number" ? `<td${cls(v)}>${fmt(v, Number.isInteger(v) && G.varied.includes(c) ? 0 : 2)}</td>` : `<td class="txt">${v}</td>`; }).join("")}</tr>`).join("") + "</tbody>";
+  $("grid-table").querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    sortDir = th.dataset.c === sortCol ? -sortDir : -1; sortCol = th.dataset.c; renderGrid(); }));
+  $("grid-table").querySelectorAll("tbody tr").forEach(tr => tr.addEventListener("click", () => selectConfig(+tr.dataset.i)));
+}
+const cum = a => { let c = 0; return a.map(v => +(c += v).toFixed(2)); };
+const baseIdx = G.rows.findIndex(r => G.varied.every(p => {
+  const defaults = { or_start: "07:00", or_minutes: 15, entry: "close", signal_tf: 5, stop: "opposite", rr: 2, atr_max: 99 };
+  return defaults[p] === undefined || r[gi[p]] === defaults[p]; }));
+const cfgChart = new Chart($("cfg-chart"), {
+  type: "line",
+  data: { labels: G.months, datasets: [
+    { label: "Pine default", data: baseIdx >= 0 ? cum(G.monthly_r[baseIdx]) : [], borderColor: C.s[0], backgroundColor: C.s[0], borderWidth: 2, pointRadius: 0 },
+    { label: "selected config", data: [], borderColor: C.hl, backgroundColor: C.hl, borderWidth: 2, pointRadius: 0 } ] },
+  options: { interaction: { mode: "index", intersect: false },
+    plugins: { vline: { label: G.months.find(m => m >= D.split.slice(0, 7)), text: "OOS →" },
+               tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { ticks: { maxTicksLimit: 12, maxRotation: 0 }, grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "cumulative R (monthly)" } } } },
+});
+function selectConfig(i, scroll) {
+  selected = i; const r = G.rows[i];
+  cfgChart.data.datasets[1].data = cum(G.monthly_r[i]);
+  cfgChart.data.datasets[1].label = G.varied.map(p => `${p}=${r[gi[p]]}`).join(", ");
+  cfgChart.update();
+  scatter.data.datasets[0].data = [{ x: r[gi[`is_${sk}`]], y: r[gi[`oos_${sk}`]], i }]; scatter.update();
+  renderGrid();
+  if (scroll) $("explorer").scrollIntoView({ behavior: "smooth" });
+}
+renderGrid();
+{ const top = rowIndex.slice().sort((a, b) => (G.rows[b][gi[`is_${sk}`]] ?? -1e9) - (G.rows[a][gi[`is_${sk}`]] ?? -1e9))[0]; if (top != null) selectConfig(top); }
+
+// ---------- walk-forward ----------
+const folds = D.folds;
+$("wf-note").innerHTML = `Rolling ${D.validation.train_months}-month training window: pick the best config by ${sk}, then trade it blind for the next ${D.validation.test_months} months. Every test period is positive, but the totals are small, and the chosen settings change from fold to fold. Stitched together: <b>${fmt(wf.stats.total_r, 1)} R</b>, PF ${fmt(wf.stats.pf)}, Sharpe ${fmt(wf.stats.sharpe)}.`;
+new Chart($("wf-chart"), {
+  type: "bar",
+  data: { labels: folds.map(f => f.test.replace("..", " → ")), datasets: [{ label: "test-period R", data: folds.map(f => f.test_total_r),
+          backgroundColor: folds.map(f => f.test_total_r < 0 ? C.neg : C.pos), borderRadius: 4, borderSkipped: false }] },
+  options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "R in test period" } } } },
+});
+const trk = `train_${sk}`, tek = `test_${sk}`;
+$("wf-table").innerHTML = `<thead><tr><th>Train</th><th>Test</th><th>${trk}</th><th>${tek}</th><th>trades</th><th>net $</th><th>R</th><th class="txt">chosen params (vs defaults)</th></tr></thead><tbody>` +
+  folds.map(f => `<tr><td>${f.train}</td><td>${f.test}</td><td>${fmt(f[trk])}</td><td${cls(f[tek])}>${fmt(f[tek])}</td><td>${f.test_trades}</td><td${cls(f.test_net)}>${money(f.test_net)}</td><td${cls(f.test_total_r)}>${fmt(f.test_total_r, 1)}</td><td class="txt">${f.params}</td></tr>`).join("") + "</tbody>";
+
+// ---------- trades ----------
+$("tr-cfg").innerHTML = F.map((f, i) => `<option value="${i}">${f.name}</option>`).join("");
+["tr-cfg", "tr-year", "tr-side", "tr-reason"].forEach(id => $(id).addEventListener("change", renderTrades));
+const trChart = new Chart($("tr-chart"), { type: "bar", data: { labels: [], datasets: [{ label: "R per month", data: [], backgroundColor: [], borderRadius: 3, borderSkipped: false }] },
+  options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${fmt(c.parsed.y, 1)} R` } } },
+    scales: { x: { ticks: { maxTicksLimit: 14, maxRotation: 0 }, grid: { display: false } }, y: { ...zeroLine, title: { display: true, text: "R per month" } } } } });
+function renderTrades(e) {
+  const f = F[+$("tr-cfg").value];
+  if (!e || e.target.id === "tr-cfg") {
+    const ys = [...new Set(f.trades.map(t => t[TC.date].slice(0, 4)))];
+    $("tr-year").innerHTML = `<option value="">All</option>` + ys.map(y => `<option>${y}</option>`).join("");
+  }
+  const y = $("tr-year").value, s = $("tr-side").value, rs = $("tr-reason").value;
+  const ts = f.trades.filter(t => (!y || t[TC.date].startsWith(y)) && (!s || String(t[TC.side]) === s) && (!rs || t[TC.reason] === rs));
+  const sumR = ts.reduce((a, t) => a + t[TC.r], 0), wins = ts.filter(t => t[TC.pnl] > 0).length;
+  $("tr-summary").textContent = `${ts.length} trades · total ${fmt(sumR, 1)} R · win ${ts.length ? fmt(100 * wins / ts.length, 1) : "—"}% · net ${money(ts.reduce((a, t) => a + t[TC.pnl], 0))}`;
+  const m = {}; for (const t of ts) { const k = t[TC.date].slice(0, 7); m[k] = (m[k] || 0) + t[TC.r]; }
+  const months = Object.keys(m).sort();
+  trChart.data.labels = months; trChart.data.datasets[0].data = months.map(k => +m[k].toFixed(2));
+  trChart.data.datasets[0].backgroundColor = months.map(k => m[k] < 0 ? C.neg : C.pos); trChart.update();
+  $("tr-table").innerHTML = `<thead><tr><th>date</th><th>side</th><th>qty</th><th>entry</th><th>stop</th><th>exit</th><th>exit time</th><th>exit</th><th>range</th><th>P&L</th><th>R</th></tr></thead><tbody>` +
+    ts.slice().reverse().map(t => `<tr><td>${t[TC.date]}</td><td>${t[TC.side] > 0 ? "Long" : "Short"}</td><td>${t[TC.qty]}</td><td>${fmt(t[TC.entry])}</td><td>${fmt(t[TC.stop])}</td><td>${fmt(t[TC.exit])}</td><td>${t[TC.exit_time]}</td><td>${t[TC.reason]}</td><td>${fmt(t[TC.range])}</td><td${cls(t[TC.pnl])}>${money(t[TC.pnl])}</td><td${cls(t[TC.r])}>${fmt(t[TC.r])}</td></tr>`).join("") + "</tbody>";
+}
+renderTrades();
+
+const sens = (p, v, col) => { const xs = okRows.filter(r => r[gi[p]] === v).map(r => r[gi[col]]).filter(x => x != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+$("findings-list").innerHTML = [
+  `<b>ES London, Pine-default rules (07:00 UTC+2, range filter scaled to 2–16 pts):</b> ${fmt(pine.stats.total_r, 1)} R over five years, PF ${fmt(pine.stats.pf)}; by year ${Object.entries(pyr).map(([y, v]) => `${y} ${fmt(v, 1)}`).join(", ")}.`,
+  `<b>ES NY open (09:30 New York, 30m, touch, 2R):</b> ${fmt(ny.stats.total_r, 1)} R, PF ${fmt(ny.stats.pf)}; by year ${Object.entries(nyr).map(([y, v]) => `${y} ${fmt(v, 1)}`).join(", ")}. Full grid: <code>grids/es_ny_open.toml</code> → <code>results/es_ny_open/</code>. Trade times for this series are New York local.`,
+  `<b>Does picking settings from past data work on ES?</b> The rank correlation between in-sample and out-of-sample Sharpe across the grid is ${fmt(D.validation.rank_corr)} (0 = no relationship). The walk-forward, which never sees its test period, makes ${fmt(wf.stats.total_r, 1)} R (${fmt(wf.stats.avg_r)} R per trade).`,
+  `<b>The MNQ "candidate" (10:00 UTC+2, 30m range, touch, 3R) on ES:</b> ${fmt(cand.stats.total_r, 1)} R, PF ${fmt(cand.stats.pf)}. It was picked on MNQ, so ES is a cross-market check of it; ${bestYear[0]} contributes ${fmt(bestYear[1], 0)} R.`,
+  `<b>Start time, in-sample vs out-of-sample (avg R/trade over every config):</b> ${["07:00", "08:00", "09:00", "10:00"].map(v => `${v} ${fmt(sens("or_start", v, "is_avg_r"), 3)} / ${fmt(sens("or_start", v, "oos_avg_r"), 3)}`).join(" · ")}.`,
+  `<b>Stop placement:</b> opposite side ${fmt(sens("stop", "opposite", "is_avg_r"), 3)} IS / ${fmt(sens("stop", "opposite", "oos_avg_r"), 3)} OOS vs midpoint ${fmt(sens("stop", "mid", "is_avg_r"), 3)} IS / ${fmt(sens("stop", "mid", "oos_avg_r"), 3)} OOS R/trade.`,
+  `Compare with the MNQ page (<code>web/index.html</code>). A setting that works on both MNQ and ES is far more likely to be real than one that only works on one of them.`,
+].map(s => `<li>${s}</li>`).join("");
+
+// ---------- data ----------
+const Q = D.quality;
+const dq = [["Bars", Q.bars.toLocaleString()], ["Range (UTC)", `${Q.first} → ${Q.last}`], ["Contracts (quarterly)", Q.contracts],
+  ["Duplicate timestamps", Q.duplicates], ["Missing prices", Q.nan], ["Impossible bars (high < open/close, etc.)", Q.bad_ohlc],
+  ["Contract roll time (UTC hour)", Q.roll_hours_utc.join(", ") + " (before any trading window, so no trade spans a roll)"],
+  ["Weekdays tested", Q.weekdays], ["Bars per year", Object.entries(Q.bars_per_year).map(([y, n]) => `${y}: ${n.toLocaleString()}`).join(" · ")]];
+$("dq-table").innerHTML = "<tbody>" + dq.map(([k, v]) => `<tr><td>${k}</td><td class="txt">${v}</td></tr>`).join("") + "</tbody>";
+new Chart($("px-chart"), {
+  type: "line",
+  data: { labels: Q.daily_close.map(d => d[0]), datasets: [{ label: "ES close", data: Q.daily_close.map(d => d[1]), borderColor: C.s[0], borderWidth: 2, pointRadius: 0 }] },
+  options: { interaction: { mode: "index", intersect: false }, plugins: { legend: { display: false } },
+    scales: { x: { ticks: { maxTicksLimit: 10, maxRotation: 0 }, grid: { display: false } }, y: { title: { display: true, text: "price" } } } },
+});
+</script>
+</body>
+</html>

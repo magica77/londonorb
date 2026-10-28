@@ -1,0 +1,35 @@
+# ES version of grids/ny_close.toml: last-hour ORB (15:00 New York = 12:00 Pacific), same grid and validation as MNQ.
+# Prices: Databento ES.v.0. Sizing/costs: MES micro ($5/pt, $1.24 RT, $50k, 1% risk, max 10).
+# `uv run orb grid grids/es_ny_close.toml` -> results/es_ny_close/   (MNQ results are untouched)
+
+[data]
+symbol = "ES.v.0"
+
+[base]
+tz = "America/New_York"
+or_start = "15:00"
+entry_end = "15:50"
+hold_end = "16:00"
+min_range = 0
+max_range = 1000
+commission_rt = 1.24
+slippage_ticks = 1
+point_value = 5.0
+tick = 0.25
+
+[grid]
+or_minutes = [5, 10, 15, 20, 30]
+entry = ["close", "touch"]
+signal_tf = [1, 5]
+stop = ["opposite", "mid"]
+rr = [1.0, 1.5, 2.0, 3.0]
+hold_end = ["15:55", "16:00"]
+
+[validation]
+sort = "sharpe"
+min_trades_yr = 40
+oos_frac = 0.3
+
+[walkforward]
+train_months = 24
+test_months = 6

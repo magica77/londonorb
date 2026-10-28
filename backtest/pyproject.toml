@@ -1,0 +1,30 @@
+[project]
+name = "orb-backtest"
+version = "0.1.0"
+description = "Backtest and grid-search suite for the London ORB strategy on MNQ 1-minute data"
+requires-python = ">=3.12"
+dependencies = [
+    "databento>=0.88.0",
+    "numba>=0.68.0",
+    "numpy>=2.5.4",
+    "pandas>=3.1.0",
+    "pyarrow>=26.0.0",
+]
+
+[project.scripts]
+orb = "orb.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["orb"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

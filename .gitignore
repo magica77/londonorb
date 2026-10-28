@@ -1,0 +1,46 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Data: market data and backtest outputs
+*.pkl
+*.pickle
+*.parquet
+*.feather
+*.h5
+*.csv
+*.xlsx
+data/
+results/
+
+# Personal / secrets / local config
+.env
+.env.*
+*.key
+*.pem
+.claude/
+CLAUDE.local.md
+*.local.*
+notes/
+scratch/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*:Zone.Identifier
+*.swp
+*~
+.idea/
+.vscode/
+
+# Generated results viewer data
+backtest/web/data.js
+backtest/web/*/data.js
+
+.python-version
